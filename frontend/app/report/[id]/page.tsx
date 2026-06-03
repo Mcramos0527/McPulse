@@ -1,3 +1,6 @@
+"use client"
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { notFound } from 'next/navigation'
 
 interface ReportResult {
@@ -12,18 +15,49 @@ interface ReportResult {
   personas_count: number
 }
 
-async function getReport(shareToken: string) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-  const res = await fetch(`${apiUrl}/api/analyses/share/${shareToken}`, {
-    next: { revalidate: 3600 },
-  })
-  if (!res.ok) return null
-  return res.json()
+interface ReportData {
+  product_name: string
+  status: string
+  result?: ReportResult
 }
 
-export default async function ReportPage({ params }: { params: { id: string } }) {
-  const data = await getReport(params.id)
-  if (!data || data.status !== 'completed' || !data.result) notFound()
+export function generateStaticParams() {
+  return []
+}
+
+export default function ReportPage() {
+  const params = useParams()
+  const shareToken = params.id as string
+  const [data, setData] = useState<ReportData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    fetch(`${apiUrl}/api/analyses/share/${shareToken}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Not found')
+        return res.json()
+      })
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => { setError(true); setLoading(false) })
+  }, [shareToken])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-accent-green font-mono animate-pulse">LOADING REPORT...</p>
+      </div>
+    )
+  }
+
+  if (error || !data || data.status !== 'completed' || !data.result) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-red-400 font-mono">REPORT NOT FOUND</p>
+      </div>
+    )
+  }
 
   const r: ReportResult = data.result
   const scoreColor = r.signal_level === 'STRONG' ? '#00FF94' : r.signal_level === 'MODERATE' ? '#FFB800' : '#FF3B3B'
@@ -31,7 +65,6 @@ export default async function ReportPage({ params }: { params: { id: string } })
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white">
-      {/* Report Header */}
       <div className="bg-[#0a0a0a] border-b border-gray-800 px-8 py-6">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div>
@@ -53,15 +86,11 @@ export default async function ReportPage({ params }: { params: { id: string } })
       </div>
 
       <div className="max-w-4xl mx-auto px-8 py-8 space-y-8">
-        {/* ICP */}
         <section>
           <h2 className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-3">Ideal Customer Profile</h2>
-          <p className="text-white text-lg leading-relaxed bg-[#111] rounded-xl p-6 border border-gray-800">
-            {r.icp_description}
-          </p>
+          <p className="text-white text-lg leading-relaxed bg-[#111] rounded-xl p-6 border border-gray-800">{r.icp_description}</p>
         </section>
 
-        {/* Market Response */}
         <section>
           <h2 className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-3">Market Response</h2>
           <div className="grid grid-cols-3 gap-4">
@@ -71,9 +100,7 @@ export default async function ReportPage({ params }: { params: { id: string } })
               { label: 'No', count: r.market_response.no, color: '#FF3B3B' },
             ].map(item => (
               <div key={item.label} className="bg-[#111] rounded-xl p-6 border border-gray-800 text-center">
-                <div className="text-4xl font-mono font-bold" style={{ color: item.color }}>
-                  {item.count}
-                </div>
+                <div className="text-4xl font-mono font-bold" style={{ color: item.color }}>{item.count}</div>
                 <div className="text-gray-400 text-sm mt-2">{item.label}</div>
                 <div className="text-gray-600 font-mono text-xs">{Math.round(item.count / total * 100)}%</div>
               </div>
@@ -81,7 +108,6 @@ export default async function ReportPage({ params }: { params: { id: string } })
           </div>
         </section>
 
-        {/* Objections + Features */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <section>
             <h2 className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-3">Top Objections</h2>
@@ -107,7 +133,6 @@ export default async function ReportPage({ params }: { params: { id: string } })
           </section>
         </div>
 
-        {/* Next Steps */}
         <section>
           <h2 className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-3">Recommended Next Steps</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -120,7 +145,6 @@ export default async function ReportPage({ params }: { params: { id: string } })
           </div>
         </section>
 
-        {/* WTP */}
         <section>
           <h2 className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-3">Willingness to Pay</h2>
           <div className="bg-[#111] rounded-xl p-6 border border-gray-800">
@@ -133,10 +157,7 @@ export default async function ReportPage({ params }: { params: { id: string } })
                 <div key={tier} className="flex items-center gap-4 mb-3">
                   <span className="text-gray-400 font-mono text-xs w-16 shrink-0">{tier}</span>
                   <div className="flex-1 bg-gray-800 rounded-full h-3">
-                    <div
-                      className="bg-accent-green h-3 rounded-full"
-                      style={{ width: `${Math.round((count as number) / total * 100)}%` }}
-                    />
+                    <div className="bg-accent-green h-3 rounded-full" style={{ width: `${Math.round((count as number) / total * 100)}%` }} />
                   </div>
                   <span className="text-gray-500 font-mono text-xs w-8 text-right">{count as number}</span>
                 </div>
@@ -144,7 +165,6 @@ export default async function ReportPage({ params }: { params: { id: string } })
           </div>
         </section>
 
-        {/* Footer */}
         <footer className="text-center text-gray-600 font-mono text-xs pt-4 border-t border-gray-800">
           Generated by MCPulse · market validation powered by synthetic AI personas
         </footer>
